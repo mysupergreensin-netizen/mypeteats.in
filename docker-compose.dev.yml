@@ -1,0 +1,32 @@
+# Development overrides for docker-compose.yml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: npm run dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - PORT=9000
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/store}
+      - APP_ADMIN_TOKEN=${APP_ADMIN_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+
+  mongo:
+    ports:
+      - "27017:27017"  # Expose for local dev access
+
+  init:
+    # Skip init in dev mode - run manually if needed
+

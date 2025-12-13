@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-9000}
+      - MONGODB_URI=${MONGODB_URI}
+      - APP_ADMIN_TOKEN=${APP_ADMIN_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
+    depends_on:
+      - mongo
+    ports:
+      - "${PORT:-9000}:9000"
+
+  mongo:
+    image: mongo:7
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: store
+    volumes:
+      - mongo-data:/data/db
+
+  # Optional one-off init job to create indexes
+  init:
+    image: node:18-alpine
+    depends_on:
+      - mongo
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URI=${MONGODB_URI}
+    command: ["node", "scripts/init.mjs"]
+    volumes:
+      - .:/app
+    profiles: ["init"]
+
+volumes:
+  mongo-data:
