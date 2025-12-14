@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import Image from 'next/image';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
+import Spinner from '../../components/ui/Spinner';
 import { mockProducts } from '../../data/mockData';
 import connectDB from '../../lib/db';
 import Product from '../../models/Product';
@@ -92,13 +94,17 @@ export default function ProductDetail({ product }) {
       </Head>
       <div className="grid gap-12 lg:grid-cols-2">
         <div className="space-y-6">
-          {product.images?.map((image) => (
-            <img
-              key={image}
-              src={image}
-              alt={product.title}
-              className="h-80 w-full rounded-4xl object-cover"
-            />
+          {product.images?.map((image, index) => (
+            <div key={image} className="relative h-80 w-full rounded-4xl overflow-hidden bg-gray-200/20">
+              <Image
+                src={image}
+                alt={`${product.title} - Image ${index + 1}`}
+                fill
+                className="object-cover"
+                priority={index === 0}
+                sizes="(max-width: 768px) 100vw, 50vw"
+              />
+            </div>
           ))}
         </div>
         <div className="space-y-6">
@@ -113,7 +119,14 @@ export default function ProductDetail({ product }) {
                 {formatPrice(product.price_cents, product.currency)}
               </span>
               <Button onClick={handleAddToCart} disabled={adding}>
-                {adding ? 'Adding...' : 'Add to ritual'}
+                {adding ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner size="sm" />
+                    Adding...
+                  </span>
+                ) : (
+                  'Add to ritual'
+                )}
               </Button>
             </div>
             {addError && (
@@ -148,18 +161,28 @@ export default function ProductDetail({ product }) {
   );
 }
 
-export async function getServerSideProps({ params }) {
+export async function getStaticPaths() {
+  // Start with no pre-rendered paths - generate on-demand
+  return {
+    paths: [],
+    fallback: 'blocking'
+  };
+}
+
+export async function getStaticProps({ params }) {
   try {
     await connectDB();
     
     // Normalize slug - ensure it's lowercase and trimmed
     const normalizedSlug = params.slug.toLowerCase().trim();
     
-    // Directly query the database instead of making HTTP request
+    // Optimized query with field selection - only fetch needed fields
     const product = await Product.findOne({ 
       slug: normalizedSlug, 
       published: true 
-    }).lean();
+    })
+    .select('title description price_cents currency images categories attributes slug sku _id')
+    .lean();
     
     if (product) {
       // Convert MongoDB _id to string for client-side
@@ -169,27 +192,36 @@ export async function getServerSideProps({ params }) {
             ...product,
             _id: product._id.toString()
           }
-        } 
+        },
+        // Revalidate every 60 seconds (ISR)
+        revalidate: 60
       };
     }
     
-    // If not found, check if product exists but isn't published
-    const unpublishedProduct = await Product.findOne({ slug: normalizedSlug }).lean();
-    if (unpublishedProduct) {
-      console.warn(`[Product Page] Product found but not published: ${normalizedSlug}`);
-    } else {
-      console.warn(`[Product Page] Product not found: ${normalizedSlug}`);
-    }
+    // Product not found - return 404
+    return {
+      notFound: true
+    };
   } catch (error) {
     console.error('[Product Page] Error fetching product from database:', error);
+    
+    // Fallback to mock products if database query fails
+    const fallback = mockProducts.find((item) => 
+      item.slug?.toLowerCase() === params.slug.toLowerCase()
+    ) || null;
+    
+    if (fallback) {
+      return { 
+        props: { product: fallback },
+        revalidate: 60
+      };
+    }
+    
+    // No product found in database or mock data
+    return {
+      notFound: true
+    };
   }
-
-  // Fallback to mock products if database query fails
-  const fallback = mockProducts.find((item) => 
-    item.slug?.toLowerCase() === params.slug.toLowerCase()
-  ) || null;
-  
-  return { props: { product: fallback } };
 }
 
 
