@@ -1,5 +1,6 @@
 import connectDB from '../../../lib/db';
-import Product from '../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getProductsCollection } from '../../../lib/collections';
 import { getUserFromRequest } from '../auth/_utils';
 import { carts, getCartId } from './_store';
 import { warn, error, apiLog } from '../../../utils/logger';
@@ -7,6 +8,7 @@ import { warn, error, apiLog } from '../../../utils/logger';
 export default async function handler(req, res) {
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
     
     // Get user if authenticated
     const user = await getUserFromRequest(req);
@@ -24,7 +26,9 @@ export default async function handler(req, res) {
       const enrichedItems = await Promise.all(
         cart.items.map(async (item) => {
           try {
-            const product = await Product.findById(item.productId).lean();
+            const product = await productsCollection.findOne({
+              _id: new ObjectId(item.productId),
+            });
             if (!product) {
               return null; // Product no longer exists
             }
@@ -86,7 +90,9 @@ export default async function handler(req, res) {
       // Verify product exists and is published
       let product;
       try {
-        product = await Product.findById(productId).lean();
+        product = await productsCollection.findOne({
+          _id: new ObjectId(productId),
+        });
       } catch (findError) {
         apiLog('/api/cart', 'Error finding product', { level: 'error', error: findError.message });
         return res.status(400).json({ 
@@ -173,7 +179,14 @@ export default async function handler(req, res) {
         cart.items.splice(itemIndex, 1);
       } else {
         // Verify product still exists and check inventory
-        const product = await Product.findById(productId).lean();
+        let product;
+        try {
+          product = await productsCollection.findOne({
+            _id: new ObjectId(productId),
+          });
+        } catch (findError) {
+          return res.status(400).json({ error: 'Invalid product ID format' });
+        }
         if (!product || !product.published) {
           return res.status(400).json({ error: 'Product is not available' });
         }

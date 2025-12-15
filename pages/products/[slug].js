@@ -8,7 +8,7 @@ import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
 import { mockProducts } from '../../data/mockData';
 import connectDB from '../../lib/db';
-import Product from '../../models/Product';
+import { getProductsCollection } from '../../lib/collections';
 import { useCart } from '../../contexts/CartContext';
 
 const formatPrice = (cents, currency = 'INR') =>
@@ -172,17 +172,31 @@ export async function getStaticPaths() {
 export async function getStaticProps({ params }) {
   try {
     await connectDB();
-    
+    const productsCollection = await getProductsCollection();
+
     // Normalize slug - ensure it's lowercase and trimmed
     const normalizedSlug = params.slug.toLowerCase().trim();
     
     // Optimized query with field selection - only fetch needed fields
-    const product = await Product.findOne({ 
-      slug: normalizedSlug, 
-      published: true 
-    })
-    .select('title description price_cents currency images categories attributes slug sku _id')
-    .lean();
+    const product = await productsCollection.findOne(
+      {
+        slug: normalizedSlug,
+        published: true,
+      },
+      {
+        projection: {
+          title: 1,
+          description: 1,
+          price_cents: 1,
+          currency: 1,
+          images: 1,
+          categories: 1,
+          attributes: 1,
+          slug: 1,
+          sku: 1,
+        },
+      }
+    );
     
     if (product) {
       // Convert MongoDB _id to string for client-side
