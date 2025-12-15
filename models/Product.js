@@ -6,7 +6,6 @@ const productSchema = new mongoose.Schema({
     required: [true, 'SKU is required'],
     unique: true,
     trim: true,
-    index: true,
     validate: {
       validator: function(v) {
         return /^[A-Z0-9-]+$/.test(v);
@@ -25,7 +24,6 @@ const productSchema = new mongoose.Schema({
     type: String,
     unique: true,
     trim: true,
-    index: true,
     lowercase: true
   },
   description: {
@@ -97,8 +95,7 @@ const productSchema = new mongoose.Schema({
   },
   published: {
     type: Boolean,
-    default: false,
-    index: true
+    default: false
   },
   metadata: {
     type: mongoose.Schema.Types.Mixed,
