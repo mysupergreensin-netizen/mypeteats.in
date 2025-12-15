@@ -66,7 +66,16 @@ mongodb+srv://myuser:mypassword@cluster0.xxxxx.mongodb.net/store?retryWrites=tru
 4. Import your GitHub repository
 5. Select the repository containing MyPetEats
 
-### 2.2 Configure Environment Variables
+### 2.2 Install Dependencies
+
+The project includes `@vercel/functions` for optimized database connection pooling in serverless environments. This will be automatically installed during the Vercel build process.
+
+If deploying manually or testing locally, install dependencies:
+```bash
+npm install
+```
+
+### 2.3 Configure Environment Variables
 
 In the Vercel project settings, add these environment variables:
 
@@ -264,6 +273,16 @@ You can also trigger manual deployments from the Vercel dashboard.
    - Connection metrics
    - Storage usage
    - Query performance
+
+## Vercel Functions Optimization
+
+This project includes optimization for Vercel Functions using `@vercel/functions` package. This ensures:
+
+- **Connection Pool Management**: Database connections are properly managed when functions suspend and resume
+- **Prevents Connection Leaks**: Avoids connection exhaustion in serverless environments
+- **Improved Performance**: Better connection reuse across function invocations
+
+The optimization is automatically applied in `lib/db.js` and works seamlessly with Mongoose. It's optional - the app works without it, but performance is better with it enabled on Vercel.
 
 ## Next Steps
 
