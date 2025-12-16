@@ -60,7 +60,6 @@ export default function HomePage() {
 
       <div className="space-y-12 md:space-y-16">
         <Hero />
-        <CategoryShowcase />
         <FeaturedProducts products={products} loading={loading} />
         <ClubMembership />
         <LearnMore />

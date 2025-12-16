@@ -40,11 +40,11 @@ export default function Footer() {
             </h4>
             <ul className="mt-4 space-y-3 text-sm text-white/70">
               {links.map((link) => (
-                <li 
-                  key={link.label}
-                  className="text-[#02292b] bg-white border-2 border-[#969696] w-[100px] ml-2 shadow-[0px_4px_12px_0px_rgba(0,0,0,0.15)] align-middle mb-0.5"
-                >
-                  <Link href={link.href} className="hover:text-white">
+                <li key={link.label}>
+                  <Link
+                    href={link.href}
+                    className="transition-colors hover:text-white"
+                  >
                     {link.label}
                   </Link>
                 </li>
