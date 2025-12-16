@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../contexts/CartContext';
+import Logo from '../ui/Logo';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -69,11 +70,7 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 backdrop-blur-2xl bg-purple/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 md:px-10">
-        <Link href="/" className="flex items-center">
-          <span className="text-xl font-bold text-white">
-            mypeteats.in
-          </span>
-        </Link>
+        <Logo size="default" />
 
         <nav className="hidden items-center space-x-8 text-sm font-semibold text-white/80 md:flex">
           {navLinks.map((link) => (

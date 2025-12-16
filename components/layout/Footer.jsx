@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Logo from '../ui/Logo';
 
 const sections = {
   Shop: [
@@ -23,7 +24,7 @@ export default function Footer() {
     <footer className="mt-20 border-t border-white/10 bg-purple/80 backdrop-blur-2xl">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-14 md:grid-cols-4 md:px-10">
         <div>
-          <p className="text-2xl font-display text-white">mypeteats</p>
+          <Logo size="large" className="mb-4" />
           <p className="mt-4 text-sm text-white/60">
             Dehydrated microgreens engineered for peak pet health and joyful
             wagging tails.
