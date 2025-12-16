@@ -1,6 +1,6 @@
-import bcrypt from 'bcryptjs';
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { createUser, findUserByEmail, updateUserById, hashPassword } from '../../../lib/users';
+import { ObjectId } from '../../../lib/db';
 
 const ADMIN_TOKEN = process.env.APP_ADMIN_TOKEN;
 
@@ -35,15 +35,23 @@ export default async function handler(req, res) {
   try {
     await connectDB();
 
-    const existing = await User.findOne({ email: email.toLowerCase() });
+    const existing = await findUserByEmail(email);
     if (existing) {
       // If the user already exists, upgrade to admin
       if (existing.role !== 'admin') {
-        existing.role = 'admin';
-        await existing.save();
+        const updated = await updateUserById(existing._id.toString(), { role: 'admin' });
+        return res.status(200).json({
+          message: 'Admin user already existed; ensured role is admin',
+          user: {
+            id: updated._id.toString(),
+            email: updated.email,
+            name: updated.name,
+            role: updated.role,
+          },
+        });
       }
       return res.status(200).json({
-        message: 'Admin user already existed; ensured role is admin',
+        message: 'Admin user already exists',
         user: {
           id: existing._id.toString(),
           email: existing.email,
@@ -53,9 +61,9 @@ export default async function handler(req, res) {
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await hashPassword(password);
 
-    const user = await User.create({
+    const user = await createUser({
       name: name || '',
       email: email.toLowerCase(),
       passwordHash,

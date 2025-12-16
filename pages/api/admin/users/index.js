@@ -1,5 +1,5 @@
 import connectDB from '../../../../lib/db';
-import User from '../../../../models/User';
+import { findUsers, countUsers, createUser, findUserByEmail, hashPassword } from '../../../../lib/users';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 
@@ -40,14 +40,13 @@ async function handler(req, res) {
       }
 
       // Get all users (admin can see all)
-      const users = await User.find(query)
-        .select('-passwordHash') // Don't return password hashes
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
+      const users = await findUsers(query, {
+        page,
+        limit,
+        sort: { created_at: -1 },
+      });
 
-      const total = await User.countDocuments(query);
+      const total = await countUsers(query);
 
       return res.status(200).json({
         users,
@@ -84,22 +83,21 @@ async function handler(req, res) {
       const allowedRoles = ['staff', 'manager', 'admin'];
       const targetRole = allowedRoles.includes(role) ? role : 'staff';
 
-      const existing = await User.findOne({ email: email.toLowerCase() });
+      const existing = await findUserByEmail(email);
       if (existing) {
         return res.status(409).json({ error: 'Email already in use' });
       }
 
-      const bcrypt = require('bcryptjs');
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await hashPassword(password);
 
-      const user = await User.create({
+      const user = await createUser({
         name: name || '',
         email: email.toLowerCase(),
         passwordHash,
         role: targetRole
       });
 
-      const safeUser = await User.findById(user._id).select('-passwordHash').lean();
+      const safeUser = user; // Already doesn't include passwordHash
 
       return res.status(201).json({
         message: 'Admin account created successfully',

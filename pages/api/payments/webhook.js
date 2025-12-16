@@ -1,6 +1,6 @@
 import connectDB from '../../../lib/db';
-import Order from '../../../models/Order';
-import Product from '../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getOrdersCollection, getProductsCollection } from '../../../lib/collections';
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
@@ -10,6 +10,8 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const ordersCollection = await getOrdersCollection();
+    const productsCollection = await getProductsCollection();
 
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     if (!webhookSecret) {
@@ -45,7 +47,15 @@ export default async function handler(req, res) {
         return res.status(200).json({ received: true });
       }
 
-      const order = await Order.findById(orderId);
+      let order;
+      try {
+        order = await ordersCollection.findOne({
+          _id: new ObjectId(orderId),
+        });
+      } catch {
+        console.warn(`[WEBHOOK] Invalid orderId format: ${orderId}`);
+        return res.status(200).json({ received: true });
+      }
       if (!order) {
         console.warn(`[WEBHOOK] Order ${orderId} not found`);
         return res.status(200).json({ received: true });
@@ -53,24 +63,38 @@ export default async function handler(req, res) {
 
       // Update order status
       if (order.payment.status !== 'completed') {
-        order.payment.status = 'completed';
-        order.payment.transactionId = payment.id;
-        
         // Only update status and inventory if order is still pending
         if (order.status === 'pending') {
-          order.status = 'confirmed';
-          await order.save();
+          await ordersCollection.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                'payment.status': 'completed',
+                'payment.transactionId': payment.id,
+                status: 'confirmed',
+              },
+            }
+          );
 
           // Update inventory (deduct from stock)
           for (const item of order.items) {
-            await Product.findByIdAndUpdate(item.product, {
-              $inc: { inventory: -item.quantity },
-            });
+            await productsCollection.updateOne(
+              { _id: item.product },
+              { $inc: { inventory: -item.quantity } }
+            );
           }
 
           console.log(`[WEBHOOK] Order ${order.orderNumber} confirmed via webhook`);
         } else {
-          await order.save();
+          await ordersCollection.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                'payment.status': 'completed',
+                'payment.transactionId': payment.id,
+              },
+            }
+          );
         }
       }
     }
@@ -81,10 +105,20 @@ export default async function handler(req, res) {
       const orderId = payment.notes?.orderId;
 
       if (orderId) {
-        const order = await Order.findById(orderId);
+        let order;
+        try {
+          order = await ordersCollection.findOne({
+            _id: new ObjectId(orderId),
+          });
+        } catch {
+          console.warn(`[WEBHOOK] Invalid orderId format on payment.failed: ${orderId}`);
+          return res.status(200).json({ received: true });
+        }
         if (order && order.payment.status === 'pending') {
-          order.payment.status = 'failed';
-          await order.save();
+          await ordersCollection.updateOne(
+            { _id: order._id },
+            { $set: { 'payment.status': 'failed' } }
+          );
           console.log(`[WEBHOOK] Payment failed for order ${order.orderNumber}`);
         }
       }

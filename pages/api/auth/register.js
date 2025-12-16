@@ -1,6 +1,5 @@
-import bcrypt from 'bcryptjs';
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { createUser, findUserByEmail, hashPassword } from '../../../lib/users';
 import { setAuthCookie } from './_utils';
 import { apiLog } from '../../../utils/logger';
 
@@ -26,14 +25,14 @@ export default async function handler(req, res) {
   try {
     await connectDB();
 
-    const existing = await User.findOne({ email: email.toLowerCase() });
+    const existing = await findUserByEmail(email);
     if (existing) {
       return res.status(409).json({ error: 'Email already in use' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await hashPassword(password);
 
-    const user = await User.create({
+    const user = await createUser({
       name: name || '',
       email: email.toLowerCase(),
       passwordHash,

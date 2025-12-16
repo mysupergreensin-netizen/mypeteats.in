@@ -1,6 +1,6 @@
 import connectDB from '../../../lib/db';
-import Order from '../../../models/Order';
-import Product from '../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getOrdersCollection, getProductsCollection } from '../../../lib/collections';
 import crypto from 'crypto';
 
 // In-memory cart storage (same as cart API)
@@ -17,6 +17,8 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const ordersCollection = await getOrdersCollection();
+    const productsCollection = await getProductsCollection();
 
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
 
@@ -36,7 +38,14 @@ export default async function handler(req, res) {
     }
 
     // Find order
-    const order = await Order.findById(orderId);
+    let order;
+    try {
+      order = await ordersCollection.findOne({
+        _id: new ObjectId(orderId),
+      });
+    } catch {
+      return res.status(400).json({ error: 'Invalid order ID format' });
+    }
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
@@ -59,17 +68,38 @@ export default async function handler(req, res) {
     
     // Only update status and inventory if order is still pending
     if (order.status === 'pending') {
-      order.status = 'confirmed';
-      await order.save();
+      await ordersCollection.updateOne(
+        { _id: order._id },
+        {
+          $set: {
+            'payment.status': 'completed',
+            'payment.transactionId': razorpay_payment_id,
+            status: 'confirmed',
+          },
+        }
+      );
 
       // Update inventory (deduct from stock)
       for (const item of order.items) {
-        await Product.findByIdAndUpdate(item.product, {
-          $inc: { inventory: -item.quantity },
-        });
+        await productsCollection.updateOne(
+          { _id: item.product },
+          { $inc: { inventory: -item.quantity } }
+        );
       }
+
+      // Refresh order document
+      order = await ordersCollection.findOne({ _id: order._id });
     } else {
-      await order.save();
+      await ordersCollection.updateOne(
+        { _id: order._id },
+        {
+          $set: {
+            'payment.status': 'completed',
+            'payment.transactionId': razorpay_payment_id,
+          },
+        }
+      );
+      order = await ordersCollection.findOne({ _id: order._id });
     }
 
     // Clear cart

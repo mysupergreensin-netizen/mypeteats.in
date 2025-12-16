@@ -1,5 +1,5 @@
 import connectDB from '../../../../lib/db';
-import Order from '../../../../models/Order';
+import { findOrders, countOrders } from '../../../../lib/orders';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 
@@ -37,15 +37,13 @@ async function handler(req, res) {
     }
 
     // Get all orders (admin can see all)
-    const orders = await Order.find(query)
-      .sort({ created_at: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('user', 'name email')
-      .populate('items.product', 'title slug images sku')
-      .lean();
+    const orders = await findOrders(query, {
+      page,
+      limit,
+      sort: { created_at: -1 },
+    });
 
-    const total = await Order.countDocuments(query);
+    const total = await countOrders(query);
 
     return res.status(200).json({
       orders,

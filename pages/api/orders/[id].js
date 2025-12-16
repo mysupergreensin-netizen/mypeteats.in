@@ -1,6 +1,7 @@
 import connectDB from '../../../lib/db';
-import Order from '../../../models/Order';
+import { findOrderById } from '../../../lib/orders';
 import { getUserFromRequest } from '../auth/_utils';
+import { ObjectId } from '../../../lib/db';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -23,15 +24,20 @@ export default async function handler(req, res) {
     }
 
     // Get order
-    const order = await Order.findOne({
-      _id: id,
-      user: user.id, // Ensure user can only access their own orders
-    })
-      .populate('items.product', 'title slug images sku')
-      .lean();
+    let order;
+    try {
+      order = await findOrderById(id);
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid order ID format' });
+    }
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Ensure user can only access their own orders
+    if (order.user.toString() !== user.id) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     return res.status(200).json({ order });

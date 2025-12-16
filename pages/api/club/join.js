@@ -1,5 +1,5 @@
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { findUserById, updateUserById } from '../../../lib/users';
 import { getUserFromRequest } from '../auth/_utils';
 
 export default async function handler(req, res) {
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     }
 
     // Find user and update club membership
-    const userDoc = await User.findById(user.id);
+    const userDoc = await findUserById(user.id);
     if (!userDoc) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -35,18 +35,17 @@ export default async function handler(req, res) {
       });
     }
 
-    userDoc.clubMember = true;
-    await userDoc.save();
+    const updatedUser = await updateUserById(user.id, { clubMember: true });
 
     return res.status(200).json({
       success: true,
       message: 'Successfully joined MyPetEats Club',
       user: {
-        id: userDoc._id.toString(),
-        name: userDoc.name,
-        email: userDoc.email,
-        role: userDoc.role,
-        clubMember: userDoc.clubMember || false,
+        id: updatedUser._id.toString(),
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        clubMember: updatedUser.clubMember || false,
       },
     });
   } catch (error) {

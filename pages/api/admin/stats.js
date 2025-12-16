@@ -1,7 +1,6 @@
 import connectDB from '../../../lib/db';
-import Product from '../../../models/Product';
-import Order from '../../../models/Order';
-import User from '../../../models/User';
+import { getProductsCollection, getOrdersCollection } from '../../../lib/collections';
+import { getDb } from '../../../lib/db';
 import { requireAdmin } from '../../../lib/_auth';
 import { createRateLimiter } from '../../../middleware/rateLimiter';
 
@@ -23,6 +22,10 @@ async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
+    const ordersCollection = await getOrdersCollection();
+    const db = await getDb();
+    const usersCollection = db.collection('users');
 
     // Get date range for recent stats (last 30 days)
     const thirtyDaysAgo = new Date();
@@ -45,26 +48,29 @@ async function handler(req, res) {
       ordersTimeSeries
     ] = await Promise.all([
       // Product stats
-      Product.countDocuments(),
-      Product.countDocuments({ published: true }),
-      
+      productsCollection.countDocuments(),
+      productsCollection.countDocuments({ published: true }),
+
       // Order stats
-      Order.countDocuments(),
-      Order.countDocuments({ created_at: { $gte: thirtyDaysAgo } }),
-      
+      ordersCollection.countDocuments(),
+      ordersCollection.countDocuments({ created_at: { $gte: thirtyDaysAgo } }),
+
       // User stats
-      User.countDocuments(),
-      User.countDocuments({ role: 'admin' }),
-      User.countDocuments({ clubMember: true }),
-      
+      usersCollection.countDocuments(),
+      usersCollection.countDocuments({ role: 'admin' }),
+      usersCollection.countDocuments({ clubMember: true }),
+
       // Revenue stats (sum of all completed orders)
-      Order.aggregate([
+      ordersCollection
+        .aggregate([
         { $match: { 'payment.status': 'completed' } },
         { $group: { _id: null, total: { $sum: '$total_cents' } } }
-      ]),
-      
+        ])
+        .toArray(),
+
       // Recent revenue (last 30 days)
-      Order.aggregate([
+      ordersCollection
+        .aggregate([
         {
           $match: {
             'payment.status': 'completed',
@@ -72,18 +78,22 @@ async function handler(req, res) {
           }
         },
         { $group: { _id: null, total: { $sum: '$total_cents' } } }
-      ]),
-      
+        ])
+        .toArray(),
+
       // Orders by status
-      Order.aggregate([
+      ordersCollection
+        .aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } }
-      ]),
-      
+        ])
+        .toArray(),
+
       // Low inventory products (less than 10)
-      Product.countDocuments({ inventory: { $lt: 10, $gte: 0 } }),
+      productsCollection.countDocuments({ inventory: { $lt: 10, $gte: 0 } }),
 
       // Orders and revenue grouped by day for last 7 days
-      Order.aggregate([
+      ordersCollection
+        .aggregate([
         {
           $match: {
             created_at: { $gte: (() => {
@@ -110,7 +120,8 @@ async function handler(req, res) {
         {
           $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 }
         }
-      ])
+        ])
+        .toArray()
     ]);
 
     // Process revenue data

@@ -3,137 +3,184 @@
  * Run this before the app starts to ensure indexes exist
  */
 
-import mongoose from 'mongoose';
-import Product from '../models/Product.js';
-import User from '../models/User.js';
+import { MongoClient } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/store';
 
 async function initIndexes() {
+  let client;
   try {
     console.log('[INIT] Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI);
+    
+    let connectionString = MONGODB_URI;
+    // Ensure retryWrites and w=majority for MongoDB Atlas if not already present
+    if (connectionString.includes('mongodb+srv://') && !connectionString.includes('retryWrites')) {
+      const separator = connectionString.includes('?') ? '&' : '?';
+      connectionString = `${connectionString}${separator}retryWrites=true&w=majority`;
+    }
+
+    client = new MongoClient(connectionString, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    
+    await client.connect();
     console.log('[INIT] Connected to MongoDB');
+
+    const db = client.db();
+    const productsCollection = db.collection('products');
+    const usersCollection = db.collection('users');
+    const ordersCollection = db.collection('orders');
 
     console.log('[INIT] Creating indexes...');
     
-    // Ensure Product model is registered
-    if (!mongoose.models.Product) {
-      mongoose.model('Product', Product.schema);
-    }
-
-    // Ensure User model is registered
-    if (!mongoose.models.User) {
-      mongoose.model('User', User.schema);
-    }
-
-    // Create indexes
-    const ProductModel = mongoose.model('Product');
-    const UserModel = mongoose.model('User');
-    
+    // Product indexes
     // Create unique index on SKU
     try {
-      await ProductModel.collection.createIndex({ sku: 1 }, { unique: true });
-      console.log('[INIT] ✓ Created unique index on sku');
+      await productsCollection.createIndex({ sku: 1 }, { unique: true });
+      console.log('[INIT] ✓ Created unique index on products.sku');
     } catch (error) {
       if (error.code === 85) {
-        console.log('[INIT] ⚠ Index on sku already exists with different options');
+        console.log('[INIT] ⚠ Index on products.sku already exists with different options');
       } else if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on sku already exists');
+        console.log('[INIT] ✓ Index on products.sku already exists');
       }
     }
 
     // Create unique index on slug
     try {
-      await ProductModel.collection.createIndex({ slug: 1 }, { unique: true, sparse: true });
-      console.log('[INIT] ✓ Created unique index on slug');
+      await productsCollection.createIndex({ slug: 1 }, { unique: true, sparse: true });
+      console.log('[INIT] ✓ Created unique index on products.slug');
     } catch (error) {
       if (error.code === 85) {
-        console.log('[INIT] ⚠ Index on slug already exists with different options');
+        console.log('[INIT] ⚠ Index on products.slug already exists with different options');
       } else if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on slug already exists');
+        console.log('[INIT] ✓ Index on products.slug already exists');
       }
     }
 
     // Create index on published
     try {
-      await ProductModel.collection.createIndex({ published: 1 });
-      console.log('[INIT] ✓ Created index on published');
+      await productsCollection.createIndex({ published: 1 });
+      console.log('[INIT] ✓ Created index on products.published');
     } catch (error) {
       if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on published already exists');
+        console.log('[INIT] ✓ Index on products.published already exists');
       }
     }
 
     // Create index on created_at
     try {
-      await ProductModel.collection.createIndex({ created_at: -1 });
-      console.log('[INIT] ✓ Created index on created_at');
+      await productsCollection.createIndex({ created_at: -1 });
+      console.log('[INIT] ✓ Created index on products.created_at');
     } catch (error) {
       if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on created_at already exists');
+        console.log('[INIT] ✓ Index on products.created_at already exists');
       }
     }
 
-    // User model indexes
-    console.log('[INIT] Creating User model indexes...');
+    // User indexes
+    console.log('[INIT] Creating User indexes...');
     
     // Create unique index on email
     try {
-      await UserModel.collection.createIndex({ email: 1 }, { unique: true });
-      console.log('[INIT] ✓ Created unique index on email');
+      await usersCollection.createIndex({ email: 1 }, { unique: true });
+      console.log('[INIT] ✓ Created unique index on users.email');
     } catch (error) {
       if (error.code === 85) {
-        console.log('[INIT] ⚠ Index on email already exists with different options');
+        console.log('[INIT] ⚠ Index on users.email already exists with different options');
       } else if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on email already exists');
+        console.log('[INIT] ✓ Index on users.email already exists');
       }
     }
 
     // Create index on role
     try {
-      await UserModel.collection.createIndex({ role: 1 });
-      console.log('[INIT] ✓ Created index on role');
+      await usersCollection.createIndex({ role: 1 });
+      console.log('[INIT] ✓ Created index on users.role');
     } catch (error) {
       if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on role already exists');
+        console.log('[INIT] ✓ Index on users.role already exists');
       }
     }
 
     // Create index on clubMember
     try {
-      await UserModel.collection.createIndex({ clubMember: 1 });
-      console.log('[INIT] ✓ Created index on clubMember');
+      await usersCollection.createIndex({ clubMember: 1 });
+      console.log('[INIT] ✓ Created index on users.clubMember');
     } catch (error) {
       if (error.code !== 86) {
         throw error;
       } else {
-        console.log('[INIT] ✓ Index on clubMember already exists');
+        console.log('[INIT] ✓ Index on users.clubMember already exists');
+      }
+    }
+
+    // Order indexes
+    console.log('[INIT] Creating Order indexes...');
+    
+    // Create unique index on orderNumber
+    try {
+      await ordersCollection.createIndex({ orderNumber: 1 }, { unique: true });
+      console.log('[INIT] ✓ Created unique index on orders.orderNumber');
+    } catch (error) {
+      if (error.code === 85) {
+        console.log('[INIT] ⚠ Index on orders.orderNumber already exists with different options');
+      } else if (error.code !== 86) {
+        throw error;
+      } else {
+        console.log('[INIT] ✓ Index on orders.orderNumber already exists');
+      }
+    }
+
+    // Create index on user and created_at
+    try {
+      await ordersCollection.createIndex({ user: 1, created_at: -1 });
+      console.log('[INIT] ✓ Created index on orders.user and created_at');
+    } catch (error) {
+      if (error.code !== 86) {
+        throw error;
+      } else {
+        console.log('[INIT] ✓ Index on orders.user and created_at already exists');
+      }
+    }
+
+    // Create index on status and created_at
+    try {
+      await ordersCollection.createIndex({ status: 1, created_at: -1 });
+      console.log('[INIT] ✓ Created index on orders.status and created_at');
+    } catch (error) {
+      if (error.code !== 86) {
+        throw error;
+      } else {
+        console.log('[INIT] ✓ Index on orders.status and created_at already exists');
       }
     }
 
     console.log('[INIT] ✓ All indexes created successfully');
     
-    await mongoose.connection.close();
+    await client.close();
     console.log('[INIT] Connection closed');
     process.exit(0);
   } catch (error) {
     console.error('[INIT] Error:', error);
+    if (client) {
+      await client.close();
+    }
     process.exit(1);
   }
 }
 
 initIndexes();
-

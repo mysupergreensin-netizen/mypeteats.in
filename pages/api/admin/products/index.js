@@ -1,5 +1,6 @@
 import connectDB from '../../../../lib/db';
-import Product from '../../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getProductsCollection } from '../../../../lib/collections';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 import {
@@ -26,6 +27,7 @@ async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
 
     if (req.method === 'GET') {
       // List products with pagination
@@ -39,13 +41,14 @@ async function handler(req, res) {
         query.published = published;
       }
 
-      const products = await Product.find(query)
+      const products = await productsCollection
+        .find(query)
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limit)
-        .lean();
+        .toArray();
 
-      const total = await Product.countDocuments(query);
+      const total = await productsCollection.countDocuments(query);
 
       return res.status(200).json({
         products,
@@ -92,7 +95,9 @@ async function handler(req, res) {
       }
 
       // Check SKU uniqueness
-      const existingSKU = await Product.findOne({ sku: skuValidation.value });
+      const existingSKU = await productsCollection.findOne({
+        sku: skuValidation.value,
+      });
       if (existingSKU) {
         return res.status(409).json({ error: 'SKU already exists' });
       }
@@ -133,12 +138,20 @@ async function handler(req, res) {
         productData.slug = slug.trim().toLowerCase();
       }
 
-      const product = new Product(productData);
-      await product.save();
+      const now = new Date();
+      const insertResult = await productsCollection.insertOne({
+        ...productData,
+        created_at: now,
+        updated_at: now,
+      });
+
+      const product = await productsCollection.findOne({
+        _id: insertResult.insertedId,
+      });
 
       return res.status(201).json({
         message: 'Product created successfully',
-        product: product.toObject()
+        product
       });
     }
 

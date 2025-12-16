@@ -1,6 +1,6 @@
-import bcrypt from 'bcryptjs';
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { findUserByEmailWithPassword, comparePassword } from '../../../lib/users';
+import { getUsersCollection } from '../../../lib/collections';
 import { setAuthCookie, clearAuthCookie } from './_utils';
 import { apiLog } from '../../../utils/logger';
 
@@ -19,23 +19,31 @@ export default async function handler(req, res) {
     await connectDB();
 
     // Support both email and username (name) login
-    const query = email 
-      ? { email: email.toLowerCase() }
-      : { name: username.trim() };
-    
-    const user = await User.findOne(query).select('+passwordHash');
-    if (!user) {
+    let user;
+    if (email) {
+      user = await findUserByEmailWithPassword(email);
+    } else if (username) {
+      const usersCollection = await getUsersCollection();
+      user = await usersCollection.findOne({ name: username.trim() });
+    } else {
+      clearAuthCookie(res);
+      return res.status(400).json({ error: 'Email or username is required' });
+    }
+
+    if (!user || !user.passwordHash) {
       clearAuthCookie(res);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const match = await bcrypt.compare(password, user.passwordHash);
+    const match = await comparePassword(password, user.passwordHash);
     if (!match) {
       clearAuthCookie(res);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    setAuthCookie(res, user);
+    // Remove passwordHash before setting cookie
+    const { passwordHash, ...userWithoutPassword } = user;
+    setAuthCookie(res, userWithoutPassword);
 
     return res.status(200).json({
       user: {

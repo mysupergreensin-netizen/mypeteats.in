@@ -1,6 +1,7 @@
 import connectDB from '../../../lib/db';
-import Order from '../../../models/Order';
+import { findOrdersByUserId, countOrders } from '../../../lib/orders';
 import { getUserFromRequest } from '../auth/_utils';
+import { ObjectId } from '../../../lib/db';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,17 +20,15 @@ export default async function handler(req, res) {
     // Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
 
     // Get user's orders
-    const orders = await Order.find({ user: user.id })
-      .sort({ created_at: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('items.product', 'title slug images')
-      .lean();
+    const orders = await findOrdersByUserId(user.id, {
+      page,
+      limit,
+      sort: { created_at: -1 },
+    });
 
-    const total = await Order.countDocuments({ user: user.id });
+    const total = await countOrders({ user: user.id });
 
     return res.status(200).json({
       orders,

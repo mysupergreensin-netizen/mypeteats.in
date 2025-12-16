@@ -1,5 +1,5 @@
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { findUserById, updateUserById, findUserByEmail } from '../../../lib/users';
 import { getUserFromRequest } from '../auth/_utils';
 
 export default async function handler(req, res) {
@@ -17,35 +17,37 @@ export default async function handler(req, res) {
 
     const { name, email, phone } = req.body;
 
-    // Find user and update
-    const userDoc = await User.findById(user.id);
+    // Find user
+    const userDoc = await findUserById(user.id);
     if (!userDoc) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Check if email is being changed and if it's already taken
     if (email && email !== userDoc.email) {
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
+      const existingUser = await findUserByEmail(email);
+      if (existingUser && existingUser._id.toString() !== user.id) {
         return res.status(409).json({ error: 'Email already in use' });
       }
-      userDoc.email = email.toLowerCase();
     }
 
-    if (name !== undefined) userDoc.name = name;
-    if (phone !== undefined) userDoc.phone = phone;
+    // Prepare update data
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email.toLowerCase();
+    if (phone !== undefined) updateData.phone = phone;
 
-    await userDoc.save();
+    const updatedUser = await updateUserById(user.id, updateData);
 
     return res.status(200).json({
       success: true,
       user: {
-        id: userDoc._id.toString(),
-        name: userDoc.name,
-        email: userDoc.email,
-        phone: userDoc.phone,
-        role: userDoc.role,
-        clubMember: userDoc.clubMember || false,
+        id: updatedUser._id.toString(),
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        clubMember: updatedUser.clubMember || false,
       },
     });
   } catch (error) {

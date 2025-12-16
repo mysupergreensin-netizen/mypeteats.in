@@ -1,6 +1,6 @@
 import connectDB from '../../../lib/db';
-import Order from '../../../models/Order';
-import Product from '../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getOrdersCollection, getProductsCollection } from '../../../lib/collections';
 import { getUserFromRequest } from '../auth/_utils';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
@@ -32,6 +32,8 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
+    const ordersCollection = await getOrdersCollection();
 
     // Get user if authenticated
     const user = await getUserFromRequest(req);
@@ -63,8 +65,10 @@ export default async function handler(req, res) {
     }
 
     // Fetch all products and validate
-    const productIds = cart.items.map((item) => item.productId);
-    const products = await Product.find({ _id: { $in: productIds } }).lean();
+    const productIds = cart.items.map((item) => new ObjectId(item.productId));
+    const products = await productsCollection
+      .find({ _id: { $in: productIds } })
+      .toArray();
 
     if (products.length !== cart.items.length) {
       return res.status(400).json({ error: 'Some products are no longer available' });
@@ -110,7 +114,7 @@ export default async function handler(req, res) {
     const total = subtotal + shipping;
 
     // Create order in database first (with pending status)
-    const order = new Order({
+    const orderDoc = {
       user: user.id,
       items: orderItems,
       subtotal_cents: subtotal,
@@ -132,9 +136,12 @@ export default async function handler(req, res) {
         method: 'razorpay',
         status: 'pending',
       },
-    });
+    };
 
-    await order.save();
+    const insertResult = await ordersCollection.insertOne(orderDoc);
+    let order = await ordersCollection.findOne({
+      _id: insertResult.insertedId,
+    });
 
     // Check if Razorpay is configured
     if (!razorpay) {
@@ -159,8 +166,11 @@ export default async function handler(req, res) {
     const razorpayOrder = await razorpay.orders.create(razorpayOptions);
 
     // Update order with Razorpay order ID
-    order.payment.transactionId = razorpayOrder.id;
-    await order.save();
+    await ordersCollection.updateOne(
+      { _id: order._id },
+      { $set: { 'payment.transactionId': razorpayOrder.id } }
+    );
+    order = await ordersCollection.findOne({ _id: order._id });
 
     return res.status(200).json({
       orderId: order._id.toString(),

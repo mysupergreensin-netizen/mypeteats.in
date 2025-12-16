@@ -3,10 +3,10 @@
  * Also creates indexes if they don't exist
  */
 
-import mongoose from 'mongoose';
-import Product from '../models/Product.js';
+import { MongoClient } from 'mongodb';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://mongo:27017/store';
+const DB_NAME = process.env.MONGODB_DB || 'store';
 
 const sampleProducts = [
   {
@@ -63,20 +63,22 @@ const sampleProducts = [
 async function seed() {
   try {
     console.log('[SEED] Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI);
+    const client = await MongoClient.connect(MONGODB_URI);
     console.log('[SEED] Connected to MongoDB');
+    const db = client.db(DB_NAME);
+    const productsCollection = db.collection('products');
 
     // Create indexes first
     console.log('[SEED] Ensuring indexes exist...');
     try {
-      await Product.collection.createIndex({ sku: 1 }, { unique: true });
+      await productsCollection.createIndex({ sku: 1 }, { unique: true });
       console.log('[SEED] ✓ Index on sku created');
     } catch (error) {
       if (error.code !== 86) console.log('[SEED] Index on sku already exists or error:', error.message);
     }
 
     try {
-      await Product.collection.createIndex({ slug: 1 }, { unique: true, sparse: true });
+      await productsCollection.createIndex({ slug: 1 }, { unique: true, sparse: true });
       console.log('[SEED] ✓ Index on slug created');
     } catch (error) {
       if (error.code !== 86) console.log('[SEED] Index on slug already exists or error:', error.message);
@@ -92,16 +94,19 @@ async function seed() {
 
     for (const productData of sampleProducts) {
       try {
-        const existing = await Product.findOne({ sku: productData.sku });
+        const existing = await productsCollection.findOne({ sku: productData.sku });
         if (existing) {
           console.log(`[SEED] ⚠ Product with SKU ${productData.sku} already exists, skipping...`);
           skipped++;
           continue;
         }
 
-        const product = new Product(productData);
-        await product.save();
-        console.log(`[SEED] ✓ Created product: ${product.title} (${product.sku})`);
+        await productsCollection.insertOne({
+          ...productData,
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+        console.log(`[SEED] ✓ Created product: ${productData.title} (${productData.sku})`);
         inserted++;
       } catch (error) {
         if (error.code === 11000) {
@@ -114,8 +119,8 @@ async function seed() {
     }
 
     console.log(`[SEED] ✓ Seeding complete! Inserted: ${inserted}, Skipped: ${skipped}`);
-    
-    await mongoose.connection.close();
+
+    await client.close();
     console.log('[SEED] Connection closed');
     process.exit(0);
   } catch (error) {

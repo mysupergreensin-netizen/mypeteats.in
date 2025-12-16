@@ -1,5 +1,5 @@
 import connectDB from '../../../../lib/db';
-import Order from '../../../../models/Order';
+import { findOrderById, updateOrderById } from '../../../../lib/orders';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 
@@ -26,10 +26,12 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       // Get single order
-      const order = await Order.findById(id)
-        .populate('user', 'name email phone')
-        .populate('items.product', 'title slug images sku')
-        .lean();
+      let order;
+      try {
+        order = await findOrderById(id);
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid order ID format' });
+      }
 
       if (!order) {
         return res.status(404).json({ error: 'Order not found' });
@@ -40,13 +42,19 @@ async function handler(req, res) {
 
     if (req.method === 'PUT') {
       // Update order (mainly status and payment status)
-      const order = await Order.findById(id);
+      let order;
+      try {
+        order = await findOrderById(id);
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid order ID format' });
+      }
 
       if (!order) {
         return res.status(404).json({ error: 'Order not found' });
       }
 
       const { status, paymentStatus, paymentMethod } = req.body;
+      const updateData = {};
 
       // Validate status if provided
       if (status !== undefined) {
@@ -54,7 +62,7 @@ async function handler(req, res) {
         if (!validStatuses.includes(status)) {
           return res.status(400).json({ error: 'Invalid order status' });
         }
-        order.status = status;
+        updateData.status = status;
       }
 
       // Validate payment status if provided
@@ -63,7 +71,7 @@ async function handler(req, res) {
         if (!validPaymentStatuses.includes(paymentStatus)) {
           return res.status(400).json({ error: 'Invalid payment status' });
         }
-        order.payment.status = paymentStatus;
+        updateData['payment.status'] = paymentStatus;
       }
 
       // Update payment method if provided
@@ -72,15 +80,10 @@ async function handler(req, res) {
         if (!validPaymentMethods.includes(paymentMethod)) {
           return res.status(400).json({ error: 'Invalid payment method' });
         }
-        order.payment.method = paymentMethod;
+        updateData['payment.method'] = paymentMethod;
       }
 
-      await order.save();
-
-      const updatedOrder = await Order.findById(id)
-        .populate('user', 'name email phone')
-        .populate('items.product', 'title slug images sku')
-        .lean();
+      const updatedOrder = await updateOrderById(id, updateData);
 
       return res.status(200).json({
         message: 'Order updated successfully',

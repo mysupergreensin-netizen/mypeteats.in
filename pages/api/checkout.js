@@ -1,6 +1,7 @@
 import connectDB from '../../lib/db';
-import Order from '../../models/Order';
-import Product from '../../models/Product';
+import { ObjectId } from '../../lib/db';
+import { getProductsCollection } from '../../lib/collections';
+import { createOrder } from '../../lib/orders';
 import { getUserFromRequest } from './auth/_utils';
 
 // In-memory cart storage (same as cart API)
@@ -21,6 +22,7 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
 
     // Get user if authenticated
     const user = await getUserFromRequest(req);
@@ -55,8 +57,10 @@ export default async function handler(req, res) {
     }
 
     // Fetch all products and validate
-    const productIds = cart.items.map((item) => item.productId);
-    const products = await Product.find({ _id: { $in: productIds } }).lean();
+    const productIds = cart.items.map((item) => new ObjectId(item.productId));
+    const products = await productsCollection
+      .find({ _id: { $in: productIds } })
+      .toArray();
 
     if (products.length !== cart.items.length) {
       return res.status(400).json({ error: 'Some products are no longer available' });
@@ -102,7 +106,7 @@ export default async function handler(req, res) {
     const total = subtotal + shipping;
 
     // Create order
-    const order = new Order({
+    const order = await createOrder({
       user: user.id,
       items: orderItems,
       subtotal_cents: subtotal,
@@ -126,17 +130,16 @@ export default async function handler(req, res) {
       },
     });
 
-    await order.save();
-
     // Update inventory
     for (const cartItem of cart.items) {
       const product = products.find(
         (p) => p._id.toString() === cartItem.productId.toString()
       );
       if (product) {
-        await Product.findByIdAndUpdate(product._id, {
-          $inc: { inventory: -cartItem.quantity },
-        });
+        await productsCollection.updateOne(
+          { _id: product._id },
+          { $inc: { inventory: -cartItem.quantity } }
+        );
       }
     }
 

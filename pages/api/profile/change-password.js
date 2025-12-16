@@ -1,5 +1,5 @@
 import connectDB from '../../../lib/db';
-import User from '../../../models/User';
+import { findUserByEmailWithPassword, updateUserPassword, comparePassword, hashPassword } from '../../../lib/users';
 import { getUserFromRequest } from '../auth/_utils';
 
 export default async function handler(req, res) {
@@ -26,21 +26,20 @@ export default async function handler(req, res) {
     }
 
     // Find user with password hash
-    const userDoc = await User.findById(user.id).select('+passwordHash');
-    if (!userDoc) {
+    const userDoc = await findUserByEmailWithPassword(user.email);
+    if (!userDoc || !userDoc.passwordHash) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Verify current password
-    const isValid = await userDoc.comparePassword(currentPassword);
+    const isValid = await comparePassword(currentPassword, userDoc.passwordHash);
     if (!isValid) {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
     // Update password
-    const bcrypt = require('bcryptjs');
-    userDoc.passwordHash = await bcrypt.hash(newPassword, 10);
-    await userDoc.save();
+    const newPasswordHash = await hashPassword(newPassword);
+    await updateUserPassword(user.id, newPasswordHash);
 
     return res.status(200).json({ success: true, message: 'Password changed successfully' });
   } catch (error) {

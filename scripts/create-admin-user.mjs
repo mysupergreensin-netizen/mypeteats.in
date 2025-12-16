@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import connectDB from '../lib/db.js';
-import User from '../models/User.js';
-import bcrypt from 'bcryptjs';
+import { createUser, findUserByEmail, updateUserById, updateUserPassword, hashPassword } from '../lib/users.js';
+import { getUsersCollection } from '../lib/collections.js';
 
 const username = process.argv[2] || 'admin';
 const password = process.argv[3] || 'admin123';
@@ -12,47 +12,45 @@ async function createAdmin() {
     await connectDB();
     console.log('Connected to database');
 
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [
-        { email: email.toLowerCase() },
-        { name: username }
-      ]
-    });
+    // Check if user already exists by email
+    let existingUser = await findUserByEmail(email);
+    
+    // Also check by name if not found by email
+    if (!existingUser) {
+      const usersCollection = await getUsersCollection();
+      existingUser = await usersCollection.findOne({ name: username });
+    }
 
     if (existingUser) {
       // Update existing user to admin
-      if (existingUser.role !== 'admin') {
-        existingUser.role = 'admin';
-        const passwordHash = await bcrypt.hash(password, 10);
-        existingUser.passwordHash = passwordHash;
-        if (!existingUser.name) {
-          existingUser.name = username;
-        }
-        await existingUser.save();
-        console.log('✅ Updated existing user to admin');
-      } else {
-        // Update password
-        const passwordHash = await bcrypt.hash(password, 10);
-        existingUser.passwordHash = passwordHash;
-        if (!existingUser.name) {
-          existingUser.name = username;
-        }
-        await existingUser.save();
-        console.log('✅ Updated admin user password');
+      const passwordHash = await hashPassword(password);
+      const updateData = {
+        role: 'admin',
+        passwordHash,
+      };
+      if (!existingUser.name) {
+        updateData.name = username;
       }
+
+      await updateUserPassword(existingUser._id.toString(), passwordHash);
+      const updated = await updateUserById(existingUser._id.toString(), {
+        role: 'admin',
+        name: existingUser.name || username,
+      });
+
+      console.log('✅ Updated existing user to admin');
       console.log('\n📋 Admin User Details:');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`Username: ${existingUser.name || username}`);
-      console.log(`Email:    ${existingUser.email}`);
+      console.log(`Username: ${updated.name || username}`);
+      console.log(`Email:    ${updated.email}`);
       console.log(`Password: ${password}`);
-      console.log(`Role:     ${existingUser.role}`);
+      console.log(`Role:     ${updated.role}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     } else {
       // Create new admin user
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await hashPassword(password);
       
-      const user = await User.create({
+      const user = await createUser({
         name: username,
         email: email.toLowerCase(),
         passwordHash,
@@ -77,4 +75,3 @@ async function createAdmin() {
 }
 
 createAdmin();
-

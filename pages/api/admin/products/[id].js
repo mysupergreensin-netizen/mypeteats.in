@@ -1,5 +1,6 @@
 import connectDB from '../../../../lib/db';
-import Product from '../../../../models/Product';
+import { ObjectId } from 'mongodb';
+import { getProductsCollection } from '../../../../lib/collections';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 import {
@@ -32,10 +33,18 @@ async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
 
     if (req.method === 'GET') {
       // Get single product
-      const product = await Product.findById(id).lean();
+      let product;
+      try {
+        product = await productsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+      } catch {
+        return res.status(400).json({ error: 'Invalid product ID format' });
+      }
       
       if (!product) {
         return res.status(404).json({ error: 'Product not found' });
@@ -61,8 +70,15 @@ async function handler(req, res) {
         metadata
       } = req.body;
 
-      const product = await Product.findById(id);
-      
+      let product;
+      try {
+        product = await productsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+      } catch {
+        return res.status(400).json({ error: 'Invalid product ID format' });
+      }
+
       if (!product) {
         return res.status(404).json({ error: 'Product not found' });
       }
@@ -75,9 +91,9 @@ async function handler(req, res) {
         }
         
         // Check SKU uniqueness (excluding current product)
-        const existingSKU = await Product.findOne({ 
+        const existingSKU = await productsCollection.findOne({
           sku: skuValidation.value,
-          _id: { $ne: id }
+          _id: { $ne: new ObjectId(id) },
         });
         if (existingSKU) {
           return res.status(409).json({ error: 'SKU already exists' });
@@ -151,19 +167,32 @@ async function handler(req, res) {
         product.metadata = metadata;
       }
 
-      await product.save();
+      const updateResult = await productsCollection.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            ...product,
+            updated_at: new Date(),
+          },
+        },
+        { returnDocument: 'after' }
+      );
+
+      const updatedProduct = updateResult.value;
 
       return res.status(200).json({
         message: 'Product updated successfully',
-        product: product.toObject()
+        product: updatedProduct
       });
     }
 
     if (req.method === 'DELETE') {
       // Delete product
-      const product = await Product.findByIdAndDelete(id);
-      
-      if (!product) {
+      const deleteResult = await productsCollection.findOneAndDelete({
+        _id: new ObjectId(id),
+      });
+
+      if (!deleteResult.value) {
         return res.status(404).json({ error: 'Product not found' });
       }
 

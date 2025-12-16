@@ -1,5 +1,5 @@
 import connectDB from '../../../../lib/db';
-import User from '../../../../models/User';
+import { findUserById, updateUserById } from '../../../../lib/users';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
 
@@ -26,9 +26,7 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       // Get single user
-      const user = await User.findById(id)
-        .select('-passwordHash')
-        .lean();
+      const user = await findUserById(id);
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
@@ -39,13 +37,14 @@ async function handler(req, res) {
 
     if (req.method === 'PUT') {
       // Update user (mainly role and clubMember status)
-      const user = await User.findById(id);
+      const user = await findUserById(id);
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
       const { role, clubMember, name, phone } = req.body;
+      const updateData = {};
 
       // Validate role if provided
       if (role !== undefined) {
@@ -63,29 +62,25 @@ async function handler(req, res) {
           return res.status(403).json({ error: 'Only super admins can modify admin roles' });
         }
 
-        user.role = role;
+        updateData.role = role;
       }
 
       // Update clubMember status if provided
       if (clubMember !== undefined) {
-        user.clubMember = Boolean(clubMember);
+        updateData.clubMember = Boolean(clubMember);
       }
 
       // Update name if provided
       if (name !== undefined) {
-        user.name = name.trim().substring(0, 120);
+        updateData.name = name.trim().substring(0, 120);
       }
 
       // Update phone if provided
       if (phone !== undefined) {
-        user.phone = phone.trim();
+        updateData.phone = phone.trim();
       }
 
-      await user.save();
-
-      const updatedUser = await User.findById(id)
-        .select('-passwordHash')
-        .lean();
+      const updatedUser = await updateUserById(id, updateData);
 
       return res.status(200).json({
         message: 'User updated successfully',

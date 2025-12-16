@@ -1,5 +1,5 @@
 import connectDB from '../../../lib/db';
-import Product from '../../../models/Product';
+import { getProductsCollection } from '../../../lib/collections';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -8,6 +8,7 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
 
     // Public endpoint - only return published products
     const page = parseInt(req.query.page) || 1;
@@ -29,14 +30,14 @@ export default async function handler(req, res) {
       ];
     }
 
-    const products = await Product.find(query)
+    const products = await productsCollection
+      .find(query)
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
-      .select('-__v') // Exclude version key
-      .lean();
+      .toArray();
 
-    const total = await Product.countDocuments(query);
+    const total = await productsCollection.countDocuments(query);
 
     // CORS headers for public API
     res.setHeader('Access-Control-Allow-Origin', '*');

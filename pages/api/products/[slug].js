@@ -1,5 +1,5 @@
 import connectDB from '../../../lib/db';
-import Product from '../../../models/Product';
+import { getProductsCollection } from '../../../lib/collections';
 import { warn, error, apiLog } from '../../../utils/logger';
 
 export default async function handler(req, res) {
@@ -15,14 +15,20 @@ export default async function handler(req, res) {
 
   try {
     await connectDB();
+    const productsCollection = await getProductsCollection();
     // Normalize slug - ensure it's lowercase and trimmed
     const normalizedSlug = slug.toLowerCase().trim();
     
-    const product = await Product.findOne({ slug: normalizedSlug, published: true }).lean();
+    const product = await productsCollection.findOne({
+      slug: normalizedSlug,
+      published: true,
+    });
 
     if (!product) {
       // Log for debugging - check if product exists but isn't published
-      const unpublishedProduct = await Product.findOne({ slug: normalizedSlug }).lean();
+      const unpublishedProduct = await productsCollection.findOne({
+        slug: normalizedSlug,
+      });
       if (unpublishedProduct) {
         warn(`[API] Product found but not published: ${normalizedSlug}`);
       }
