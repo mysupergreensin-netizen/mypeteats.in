@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { getProductsCollection } from '../../../../lib/collections';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
+import { slugify } from '../../../../utils/slugify';
 import {
   validateTitle,
   validateSKU,
@@ -14,6 +15,24 @@ import {
 } from '../../../../utils/validation';
 
 const rateLimiter = createRateLimiter(10, 60000); // 10 requests per minute
+
+async function generateUniqueSlug(productsCollection, baseSlug) {
+  let candidate = baseSlug;
+  let suffix = 2;
+
+  while (candidate) {
+    const exists = await productsCollection.findOne(
+      { slug: candidate },
+      { projection: { _id: 1 } }
+    );
+    if (!exists) return candidate;
+    candidate = `${baseSlug}-${suffix++}`;
+    if (suffix > 50) break;
+  }
+
+  // Fallback: timestamp suffix
+  return `${baseSlug}-${Date.now()}`;
+}
 
 async function handler(req, res) {
   // Apply rate limiting
@@ -133,9 +152,13 @@ async function handler(req, res) {
         metadata: metadata || {}
       };
 
-      // Add slug if provided, otherwise it will be auto-generated
-      if (slug && typeof slug === 'string') {
-        productData.slug = slug.trim().toLowerCase();
+      // Add slug if provided, otherwise auto-generate from title
+      const baseSlug = slug && typeof slug === 'string'
+        ? slugify(slug)
+        : slugify(productData.title);
+
+      if (baseSlug) {
+        productData.slug = await generateUniqueSlug(productsCollection, baseSlug);
       }
 
       const now = new Date();

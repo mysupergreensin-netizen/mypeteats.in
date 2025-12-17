@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { getProductsCollection } from '../../../../lib/collections';
 import { requireAdmin } from '../../../../lib/_auth';
 import { createRateLimiter } from '../../../../middleware/rateLimiter';
+import { slugify } from '../../../../utils/slugify';
 import {
   validateTitle,
   validateSKU,
@@ -14,6 +15,23 @@ import {
 } from '../../../../utils/validation';
 
 const rateLimiter = createRateLimiter(10, 60000); // 10 requests per minute
+
+async function generateUniqueSlug(productsCollection, baseSlug, excludeId) {
+  let candidate = baseSlug;
+  let suffix = 2;
+
+  while (candidate) {
+    const exists = await productsCollection.findOne(
+      { slug: candidate, _id: { $ne: excludeId } },
+      { projection: { _id: 1 } }
+    );
+    if (!exists) return candidate;
+    candidate = `${baseSlug}-${suffix++}`;
+    if (suffix > 50) break;
+  }
+
+  return `${baseSlug}-${Date.now()}`;
+}
 
 async function handler(req, res) {
   // Apply rate limiting
@@ -108,11 +126,20 @@ async function handler(req, res) {
           return res.status(400).json({ error: titleValidation.error });
         }
         product.title = titleValidation.value;
-        // Slug will be auto-updated by pre-save hook
+        // If slug isn't explicitly provided, regenerate from title
+        if (slug === undefined) {
+          const baseSlug = slugify(product.title);
+          if (baseSlug) {
+            product.slug = await generateUniqueSlug(productsCollection, baseSlug, new ObjectId(id));
+          }
+        }
       }
 
       if (slug !== undefined && typeof slug === 'string') {
-        product.slug = slug.trim().toLowerCase();
+        const baseSlug = slugify(slug);
+        if (baseSlug) {
+          product.slug = await generateUniqueSlug(productsCollection, baseSlug, new ObjectId(id));
+        }
       }
 
       if (description !== undefined) {

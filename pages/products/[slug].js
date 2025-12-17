@@ -23,10 +23,15 @@ export default function ProductDetail({ product }) {
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
   const { refreshCart } = useCart();
+  const canAddToCart = /^[a-f\d]{24}$/i.test(String(product?._id || ''));
 
   const handleAddToCart = async () => {
     if (!product?._id) {
       setAddError('Product information is missing');
+      return;
+    }
+    if (!canAddToCart) {
+      setAddError('This item is a demo listing and cannot be added to cart yet.');
       return;
     }
 
@@ -118,7 +123,7 @@ export default function ProductDetail({ product }) {
               <span className="text-3xl font-semibold text-white">
                 {formatPrice(product.price_cents, product.currency)}
               </span>
-              <Button onClick={handleAddToCart} disabled={adding}>
+              <Button onClick={handleAddToCart} disabled={adding || !canAddToCart}>
                 {adding ? (
                   <span className="flex items-center gap-2">
                     <Spinner size="sm" />
@@ -131,6 +136,11 @@ export default function ProductDetail({ product }) {
             </div>
             {addError && (
               <p className="text-sm text-red-200">{addError}</p>
+            )}
+            {!canAddToCart && (
+              <p className="text-sm text-white/60">
+                Demo product (not yet synced to your database).
+              </p>
             )}
             {addSuccess && (
               <p className="text-sm text-emerald-200">{addSuccess}</p>
@@ -177,26 +187,37 @@ export async function getStaticProps({ params }) {
     // Normalize slug - ensure it's lowercase and trimmed
     const normalizedSlug = params.slug.toLowerCase().trim();
     
-    // Optimized query with field selection - only fetch needed fields
-    const product = await productsCollection.findOne(
+    const projection = {
+      title: 1,
+      description: 1,
+      price_cents: 1,
+      currency: 1,
+      images: 1,
+      categories: 1,
+      attributes: 1,
+      slug: 1,
+      sku: 1,
+      published: 1,
+    };
+
+    // Try published product first
+    let product = await productsCollection.findOne(
       {
         slug: normalizedSlug,
         published: true,
       },
       {
-        projection: {
-          title: 1,
-          description: 1,
-          price_cents: 1,
-          currency: 1,
-          images: 1,
-          categories: 1,
-          attributes: 1,
-          slug: 1,
-          sku: 1,
-        },
+        projection,
       }
     );
+
+    // If not found, try any product with that slug (helps when published=false)
+    if (!product) {
+      product = await productsCollection.findOne(
+        { slug: normalizedSlug },
+        { projection }
+      );
+    }
     
     if (product) {
       // Convert MongoDB _id to string for client-side
@@ -212,10 +233,16 @@ export async function getStaticProps({ params }) {
       };
     }
     
-    // Product not found - return 404
-    return {
-      notFound: true
-    };
+    // DB didn't have it - fall back to mock products (avoids 404 for demo slugs)
+    const fallback = mockProducts.find(
+      (item) => item.slug?.toLowerCase() === normalizedSlug
+    ) || null;
+
+    if (fallback) {
+      return { props: { product: fallback }, revalidate: 60 };
+    }
+
+    return { notFound: true };
   } catch (error) {
     console.error('[Product Page] Error fetching product from database:', error);
     
