@@ -9,6 +9,7 @@
     "seed": "node scripts/seed.mjs",
     "init": "node scripts/init.mjs",
     "rebuild": "node scripts/rebuild.mjs",
+    "format-mongodb-uri": "node scripts/format-mongodb-uri.mjs",
     "lint": "next lint",
     "create-env-example": "node scripts/create-env-example.js",
     "test": "jest",
