@@ -8,6 +8,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Check required environment variables
+  if (!process.env.MONGODB_URI) {
+    apiLog('/api/auth/register', 'MONGODB_URI not configured', { level: 'error' });
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
+
   const { name, email, password, joinClub } = req.body || {};
 
   if (!email || !password) {
@@ -23,7 +29,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    await connectDB();
+    // Connect to database with timeout handling
+    try {
+      await connectDB();
+    } catch (dbError) {
+      apiLog('/api/auth/register', 'Database connection failed', { level: 'error', error: dbError.message });
+      return res.status(503).json({ 
+        error: 'Database connection failed. Please try again in a moment.' 
+      });
+    }
 
     const existing = await findUserByEmail(email);
     if (existing) {
@@ -52,8 +66,23 @@ export default async function handler(req, res) {
       },
     });
   } catch (error) {
-    apiLog('/api/auth/register', 'Error during registration', { level: 'error', error: error.message });
-    return res.status(500).json({ error: 'Internal server error' });
+    apiLog('/api/auth/register', 'Error during registration', { level: 'error', error: error.message, stack: error.stack });
+    
+    // Provide more specific error messages
+    if (error.message?.includes('timeout') || error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+      return res.status(503).json({ error: 'Database connection failed. Please try again.' });
+    }
+    
+    if (error.message?.includes('duplicate key') || error.code === 11000) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+    
+    // Return more details in development
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error.message 
+      : 'Internal server error';
+    
+    return res.status(500).json({ error: errorMessage });
   }
 }
 

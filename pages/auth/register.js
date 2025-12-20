@@ -46,20 +46,48 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
+      // Add timeout for fetch request (30 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, joinClub }),
+        signal: controller.signal,
       });
-      const data = await res.json();
+      
+      clearTimeout(timeoutId);
+      
+      // Check if response is ok before trying to parse JSON
       if (!res.ok) {
-        setError(data.error || 'Registration failed');
+        let errorMessage = 'Registration failed';
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // If JSON parsing fails, use status text
+          errorMessage = res.status === 503 
+            ? 'Service temporarily unavailable. Please try again in a moment.'
+            : res.status === 409
+            ? 'Email already in use'
+            : `Registration failed (${res.status})`;
+        }
+        setError(errorMessage);
         return;
       }
+      
+      const data = await res.json();
       // User is logged in via cookie; redirect home
       window.location.href = '/';
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

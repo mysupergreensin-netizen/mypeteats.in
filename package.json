@@ -8,6 +8,7 @@
     "start": "next start -p ${PORT:-3000}",
     "seed": "node scripts/seed.mjs",
     "init": "node scripts/init.mjs",
+    "rebuild": "node scripts/rebuild.mjs",
     "lint": "next lint",
     "create-env-example": "node scripts/create-env-example.js",
     "test": "jest",
