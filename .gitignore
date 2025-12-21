@@ -48,3 +48,8 @@ docker-compose.override.yml
 # User uploads
 public/uploads/
 
+# Sensitive credentials (DO NOT COMMIT)
+ADMIN_CREDENTIALS.md
+*.credentials
+*.secrets
+
